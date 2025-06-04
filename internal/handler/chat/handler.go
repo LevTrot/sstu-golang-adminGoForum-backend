@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 	chatUsecase "github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/internal/usecase/chat"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 )
 
 type ChatHandler struct {
@@ -20,19 +20,28 @@ type ChatHandler struct {
 	authService authpb.AuthServiceClient
 	clients     map[*websocket.Conn]bool
 	broadcast   chan domain.ChatMessage
+	logger      *zap.Logger
 }
 
-func New(usecase *chatUsecase.UseCase, authService authpb.AuthServiceClient) *ChatHandler {
+func New(usecase *chatUsecase.UseCase, authService authpb.AuthServiceClient, logger *zap.Logger) *ChatHandler {
 	h := &ChatHandler{
 		usecase:     usecase,
 		authService: authService,
 		clients:     make(map[*websocket.Conn]bool),
 		broadcast:   make(chan domain.ChatMessage),
+		logger:      logger,
 	}
 	go h.handleMessages()
 	return h
 }
 
+// GetMessagesHandler godoc
+// @Summary Get recent chat messages
+// @Tags Chat
+// @Produce json
+// @Success 200 {array} domain.ChatMessage
+// @Failure 500 {object} response.ErrorResponse
+// @Router /chat/messages [get]
 func (h *ChatHandler) GetMessagesHandler(c *gin.Context) {
 	messages, err := h.usecase.GetMessages(c.Request.Context())
 	if err != nil {
@@ -46,12 +55,19 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
+// ChatWebSocketHandler godoc
+// @Summary WebSocket endpoint for real-time chat
+// @Tags Chat
+// @Produce plain
+// @Param token query string true "JWT token"
+// @Success 101 {string} string "WebSocket Connection Established"
+// @Failure 401 {string} string "Unauthorized"
+// @Failure 403 {string} string "Forbidden"
+// @Router /chat [get]
 func (h *ChatHandler) ChatWebSocketHandler(c *gin.Context) {
-	log.Println("Получен новый WS-запрос на /chat")
 
 	token := c.Query("token")
 	if token == "" {
-		log.Println("Нет токена в query")
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
@@ -61,38 +77,32 @@ func (h *ChatHandler) ChatWebSocketHandler(c *gin.Context) {
 
 	resp, err := h.authService.ValidateToken(ctx, &authpb.ValidateTokenRequest{Token: token})
 	if err != nil {
-		log.Println("Ошибка при валидации токена:", err)
+		h.logger.Error("Failed:", zap.Error(err))
 		c.AbortWithStatus(http.StatusForbidden)
 		return
 	}
 	if !resp.Valid {
-		log.Println("Невалидный токен:", resp.GetError())
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
 	username := resp.Username
-	log.Println("Успешная валидация токена. Пользователь:", username)
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Println("Ошибка апгрейда WebSocket:", err)
 		return
 	}
-	log.Println("WebSocket соединение установлено для:", username)
 	h.clients[conn] = true
 
 	go func(conn *websocket.Conn, username string) {
 		defer func() {
 			conn.Close()
 			delete(h.clients, conn)
-			log.Println("Соединение закрыто для:", username)
 		}()
 
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
-				log.Println("Ошибка чтения сообщения от", username, ":", err)
 				break
 			}
 
@@ -100,7 +110,6 @@ func (h *ChatHandler) ChatWebSocketHandler(c *gin.Context) {
 				Content string `json:"content"`
 			}
 			if err := json.Unmarshal(msg, &payload); err != nil {
-				log.Println("Невалидный JSON от", username, ":", err)
 				continue
 			}
 			if strings.TrimSpace(payload.Content) == "" {
@@ -113,7 +122,6 @@ func (h *ChatHandler) ChatWebSocketHandler(c *gin.Context) {
 				Timestamp: time.Now(),
 			}
 			if err := h.usecase.SendMessage(context.Background(), message.Username, message.Content); err != nil {
-				log.Println("Ошибка сохранения сообщения:", err)
 				continue
 			}
 
@@ -129,7 +137,6 @@ func (h *ChatHandler) handleMessages() {
 		for client := range h.clients {
 			err := client.WriteMessage(websocket.TextMessage, data)
 			if err != nil {
-				log.Println("Ошибка отправки сообщения клиенту:", err)
 				client.Close()
 				delete(h.clients, client)
 			}

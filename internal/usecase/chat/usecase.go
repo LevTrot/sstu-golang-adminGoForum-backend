@@ -5,6 +5,7 @@ import (
 	"time"
 
 	domain "github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/internal/domain/chat"
+	"go.uber.org/zap"
 )
 
 type Repository interface {
@@ -14,17 +15,30 @@ type Repository interface {
 }
 
 type UseCase struct {
-	repo Repository
+	repo   Repository
+	logger *zap.Logger
 }
 
-func New(repo Repository) *UseCase {
-	return &UseCase{repo: repo}
+func New(repo Repository, logger *zap.Logger) *UseCase {
+	return &UseCase{repo: repo, logger: logger}
 }
 
 func (u *UseCase) SendMessage(ctx context.Context, username, content string) error {
-	return u.repo.SaveMessage(ctx, username, content)
+	err := u.repo.SaveMessage(ctx, username, content)
+	if err != nil {
+		u.logger.Error("Failed to save chat message", zap.String("username", username), zap.Error(err))
+		return err
+	}
+	u.logger.Info("Chat message saved", zap.String("username", username))
+	return nil
 }
 
 func (u *UseCase) GetMessages(ctx context.Context) ([]domain.ChatMessage, error) {
-	return u.repo.GetRecentMessages(ctx)
+	msgs, err := u.repo.GetRecentMessages(ctx)
+	if err != nil {
+		u.logger.Error("Failed to get chat messages", zap.Error(err))
+		return nil, err
+	}
+	u.logger.Info("Fetched recent chat messages", zap.Int("count", len(msgs)))
+	return msgs, nil
 }

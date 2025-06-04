@@ -2,19 +2,20 @@ package post
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/internal/domain/post"
+	"go.uber.org/zap"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostgresRepo struct {
-	db *pgxpool.Pool
+	db     *pgxpool.Pool
+	logger *zap.Logger
 }
 
-func New(db *pgxpool.Pool) *PostgresRepo {
-	return &PostgresRepo{db: db}
+func New(db *pgxpool.Pool, logger *zap.Logger) *PostgresRepo {
+	return &PostgresRepo{db: db, logger: logger}
 }
 
 func (r *PostgresRepo) GetAll(ctx context.Context) ([]post.Post, error) {
@@ -30,9 +31,10 @@ func (r *PostgresRepo) GetAll(ctx context.Context) ([]post.Post, error) {
 		if err := rows.Scan(&p.ID, &p.TopicID, &p.Title, &p.Content, &p.Username, &p.Timestamp); err != nil {
 			return nil, err
 		}
-		fmt.Printf("Post: %+v\n", p)
+		r.logger.Info("Posts: %+v\n")
 		posts = append(posts, p)
 	}
+	r.logger.Info("All posts return")
 	return posts, nil
 }
 
@@ -47,10 +49,12 @@ func (r *PostgresRepo) GetByTopic(ctx context.Context, topicID int) ([]post.Post
 	for rows.Next() {
 		var p post.Post
 		if err := rows.Scan(&p.ID, &p.TopicID, &p.Title, &p.Content, &p.Username, &p.Timestamp); err != nil {
+			r.logger.Fatal("error", zap.Error(err))
 			return nil, err
 		}
 		posts = append(posts, p)
 	}
+	r.logger.Info("Posts by Topic return")
 	return posts, nil
 }
 

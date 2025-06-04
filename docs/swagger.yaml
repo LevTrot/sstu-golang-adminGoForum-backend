@@ -1,0 +1,418 @@
+definitions:
+  comment.CreateCommentInput:
+    properties:
+      content:
+        type: string
+      post_id:
+        type: integer
+    type: object
+  domain.ChatMessage:
+    properties:
+      content:
+        type: string
+      id:
+        type: integer
+      timestamp:
+        type: string
+      username:
+        type: string
+    type: object
+  handler.CreatePostInput:
+    properties:
+      content:
+        type: string
+      title:
+        type: string
+      topic_id:
+        type: integer
+    type: object
+  handler.CreateTopicInput:
+    properties:
+      description:
+        type: string
+      title:
+        type: string
+    required:
+    - description
+    - title
+    type: object
+  response.Comment:
+    properties:
+      content:
+        type: string
+      id:
+        type: integer
+      post_id:
+        type: integer
+      timestamp:
+        type: string
+      username:
+        type: string
+    type: object
+  response.DataCommentsResponse:
+    properties:
+      data:
+        description: Комментарии
+        items:
+          $ref: '#/definitions/response.Comment'
+        type: array
+    type: object
+  response.DataPostsResponse:
+    properties:
+      data:
+        description: Посты
+        items:
+          $ref: '#/definitions/response.Post'
+        type: array
+    type: object
+  response.ErrorResponse:
+    properties:
+      error:
+        description: Ошибка
+        type: string
+    type: object
+  response.MessageResponse:
+    properties:
+      message:
+        description: Сообщение
+        type: string
+    type: object
+  response.Post:
+    properties:
+      content:
+        type: string
+      id:
+        type: integer
+      timestamp:
+        type: string
+      title:
+        type: string
+      topic_id:
+        type: integer
+      username:
+        type: string
+    type: object
+  topic.Topic:
+    properties:
+      description:
+        type: string
+      id:
+        type: integer
+      title:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /chat:
+    get:
+      parameters:
+      - description: JWT token
+        in: query
+        name: token
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "101":
+          description: WebSocket Connection Established
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            type: string
+      summary: WebSocket endpoint for real-time chat
+      tags:
+      - Chat
+  /chat/messages:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.ChatMessage'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get recent chat messages
+      tags:
+      - Chat
+  /comments:
+    get:
+      parameters:
+      - description: Post ID
+        in: query
+        name: post_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.DataCommentsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get comments for a post
+      tags:
+      - Comments
+  /comments/create:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Comment content
+        in: body
+        name: comment
+        required: true
+        schema:
+          $ref: '#/definitions/comment.CreateCommentInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create a new comment
+      tags:
+      - Comments
+  /comments/delete:
+    delete:
+      parameters:
+      - description: Comment ID
+        in: query
+        name: comment_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete a comment by ID (admin only)
+      tags:
+      - Comments
+  /posts:
+    get:
+      parameters:
+      - description: Topic ID
+        in: query
+        name: topic_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.DataPostsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get posts by topic
+      tags:
+      - Posts
+  /posts/all:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.DataPostsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get all posts
+      tags:
+      - Posts
+  /posts/create:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Post payload
+        in: body
+        name: post
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreatePostInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create a new post
+      tags:
+      - Posts
+  /posts/delete:
+    delete:
+      parameters:
+      - description: Post ID
+        in: query
+        name: post_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete post by ID (admin only)
+      tags:
+      - Posts
+  /topics:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/topic.Topic'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Get all topics
+      tags:
+      - Topics
+  /topics/create:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Topic input
+        in: body
+        name: topic
+        required: true
+        schema:
+          $ref: '#/definitions/handler.CreateTopicInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Create a new topic
+      tags:
+      - Topics
+  /topics/delete:
+    delete:
+      parameters:
+      - description: Topic ID
+        in: query
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Delete a topic by ID (admin only)
+      tags:
+      - Topics
+swagger: "2.0"

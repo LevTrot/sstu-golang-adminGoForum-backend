@@ -5,19 +5,22 @@ import (
 
 	"github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/internal/domain/topic"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 )
 
 type TopicRepository struct {
-	DB *pgxpool.Pool
+	DB     *pgxpool.Pool
+	logger *zap.Logger
 }
 
-func New(db *pgxpool.Pool) *TopicRepository {
-	return &TopicRepository{DB: db}
+func New(db *pgxpool.Pool, logger *zap.Logger) *TopicRepository {
+	return &TopicRepository{DB: db, logger: logger}
 }
 
 func (r *TopicRepository) GetAll(ctx context.Context) ([]topic.Topic, error) {
 	rows, err := r.DB.Query(ctx, "SELECT id, title, description FROM backend_schema.topics")
 	if err != nil {
+		r.logger.Fatal("error:", zap.Error(err))
 		return nil, err
 	}
 	defer rows.Close()
@@ -26,6 +29,7 @@ func (r *TopicRepository) GetAll(ctx context.Context) ([]topic.Topic, error) {
 	for rows.Next() {
 		var t topic.Topic
 		if err := rows.Scan(&t.ID, &t.Title, &t.Description); err != nil {
+			r.logger.Fatal("error:", zap.Error(err))
 			return nil, err
 		}
 		topics = append(topics, t)

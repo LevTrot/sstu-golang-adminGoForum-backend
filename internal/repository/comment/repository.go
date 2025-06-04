@@ -4,16 +4,18 @@ import (
 	"context"
 
 	models "github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/internal/domain/comment"
+	"go.uber.org/zap"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db     *pgxpool.Pool
+	logger *zap.Logger
 }
 
-func New(db *pgxpool.Pool) *Repository {
-	return &Repository{db: db}
+func New(db *pgxpool.Pool, logger *zap.Logger) *Repository {
+	return &Repository{db: db, logger: logger}
 }
 
 func (r *Repository) GetByPostID(ctx context.Context, postID int) ([]models.Comment, error) {
@@ -27,10 +29,12 @@ func (r *Repository) GetByPostID(ctx context.Context, postID int) ([]models.Comm
 	for rows.Next() {
 		var c models.Comment
 		if err := rows.Scan(&c.ID, &c.PostID, &c.Username, &c.Content, &c.Timestamp); err != nil {
+			r.logger.Fatal("error", zap.Error(err))
 			return nil, err
 		}
 		comments = append(comments, c)
 	}
+	r.logger.Info("Post by ID return")
 	return comments, nil
 }
 

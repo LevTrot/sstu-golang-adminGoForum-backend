@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/internal/domain/post"
+	"go.uber.org/zap"
 )
 
 type Repository interface {
@@ -14,25 +15,50 @@ type Repository interface {
 }
 
 type UseCase struct {
-	repo Repository
+	repo   Repository
+	logger *zap.Logger
 }
 
-func New(repo Repository) *UseCase {
-	return &UseCase{repo: repo}
+func New(repo Repository, logger *zap.Logger) *UseCase {
+	return &UseCase{repo: repo, logger: logger}
 }
 
 func (uc *UseCase) GetAll(ctx context.Context) ([]post.Post, error) {
-	return uc.repo.GetAll(ctx)
+	posts, err := uc.repo.GetAll(ctx)
+	if err != nil {
+		uc.logger.Error("Failed to get all posts", zap.Error(err))
+		return nil, err
+	}
+	uc.logger.Info("All posts fetched", zap.Int("count", len(posts)))
+	return posts, nil
 }
 
 func (uc *UseCase) GetByTopic(ctx context.Context, topicID int) ([]post.Post, error) {
-	return uc.repo.GetByTopic(ctx, topicID)
+	posts, err := uc.repo.GetByTopic(ctx, topicID)
+	if err != nil {
+		uc.logger.Error("Failed to get posts by topic", zap.Int("topicID", topicID), zap.Error(err))
+		return nil, err
+	}
+	uc.logger.Info("Posts fetched by topic", zap.Int("topicID", topicID), zap.Int("count", len(posts)))
+	return posts, nil
 }
 
 func (uc *UseCase) Create(ctx context.Context, p post.Post) error {
-	return uc.repo.Create(ctx, p)
+	err := uc.repo.Create(ctx, p)
+	if err != nil {
+		uc.logger.Error("Failed to create post", zap.String("title", p.Title), zap.String("username", p.Username), zap.Error(err))
+		return err
+	}
+	uc.logger.Info("Post created", zap.String("title", p.Title), zap.String("username", p.Username))
+	return nil
 }
 
 func (uc *UseCase) Delete(ctx context.Context, postID int) error {
-	return uc.repo.Delete(ctx, postID)
+	err := uc.repo.Delete(ctx, postID)
+	if err != nil {
+		uc.logger.Error("Failed to delete post", zap.Int("postID", postID), zap.Error(err))
+		return err
+	}
+	uc.logger.Info("Post deleted", zap.Int("postID", postID))
+	return nil
 }

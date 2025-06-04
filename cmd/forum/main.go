@@ -10,9 +10,13 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	"github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/AdminGo/proto/authpb"
+	_ "github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/docs"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
 	postHandler "github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/internal/handler/post"
 	"github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/internal/middleware"
@@ -46,23 +50,28 @@ func NewAuthClient(addr string) (authpb.AuthServiceClient, func(), error) {
 }
 
 func main() {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("failed to initialized login: %v", err)
+	}
+	defer logger.Sync()
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		dbURL = "postgres://postgres:mysecretpassword@localhost:5432/postgres?sslmode=disable&search_path=backend_schema"
 	}
 	db, err := pgxpool.New(context.Background(), dbURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to DB: %v", err)
+		logger.Error("Failed to connect to DB: %v", zap.Error(err))
 	}
 	defer db.Close()
 
 	authClient, closeFunc, err := NewAuthClient("localhost:50051")
 	if err != nil {
-		log.Fatalf("failed to connect to auth service: %v", err)
+		logger.Error("failed to connect to auth service: %v", zap.Error(err))
 	}
 	defer closeFunc()
 
-	authMiddleware := middleware.AuthMiddleware(authClient)
+	authMiddleware := middleware.AuthMiddleware(authClient, logger)
 
 	r := gin.Default()
 
@@ -77,22 +86,24 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	postRepository := postRepo.New(db)
-	postUseCase := postUC.New(postRepository)
-	postHandler.NewPostHandler(r, postUseCase, authMiddleware)
+	postRepository := postRepo.New(db, logger)
+	postUseCase := postUC.New(postRepository, logger)
+	postHandler.NewPostHandler(r, postUseCase, authMiddleware, logger)
 
-	topicRepository := topicRepo.New(db)
-	topicUseCase := topicUC.New(topicRepository)
-	topicHandler.NewTopicHandler(r.Group("/api"), topicUseCase, authMiddleware)
+	topicRepository := topicRepo.New(db, logger)
+	topicUseCase := topicUC.New(topicRepository, logger)
+	topicHandler.NewTopicHandler(r.Group("/api"), topicUseCase, authMiddleware, logger)
 
-	commentRepository := commentRepo.New(db)
-	commentUseCase := commentUC.New(commentRepository)
-	commentHandler.NewCommentHandler(r.Group("/api"), commentUseCase, authClient)
+	commentRepository := commentRepo.New(db, logger)
+	commentUseCase := commentUC.New(commentRepository, logger)
+	commentHandler.NewCommentHandler(r.Group("/api"), commentUseCase, authClient, logger)
 
-	chatRepository := chatRepo.New(db)
-	chatUseCase := chatUC.New(chatRepository)
-	chatCleaner.StartChatCleaner(chatRepository)
-	chatHandler := chatHandler.New(chatUseCase, authClient)
+	chatRepository := chatRepo.New(db, logger)
+	chatUseCase := chatUC.New(chatRepository, logger)
+	chatCleaner.StartChatCleaner(chatRepository, logger)
+	chatHandler := chatHandler.New(chatUseCase, authClient, logger)
+
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	r.GET("/chat/messages", chatHandler.GetMessagesHandler)
 	r.GET("/chat", chatHandler.ChatWebSocketHandler)
@@ -108,8 +119,8 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"user": res.Username})
 	})
 
-	log.Println("Server started at :8080")
+	logger.Info("Server started at :8080")
 	if err := r.Run(":8080"); err != nil {
-		log.Fatal(err)
+		logger.Error("", zap.Error(err))
 	}
 }

@@ -6,23 +6,25 @@ import (
 
 	domain "github.com/LevTrot/sstu-golang-adminGoForum-backend/backend/internal/domain/chat"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 )
 
 type Repository struct {
-	db *pgxpool.Pool
+	db     *pgxpool.Pool
+	logger *zap.Logger
 }
 
-func New(db *pgxpool.Pool) *Repository {
-	return &Repository{db: db}
+func New(db *pgxpool.Pool, logger *zap.Logger) *Repository {
+	return &Repository{db: db, logger: logger}
 }
 
 func (r *Repository) SaveMessage(ctx context.Context, username, content string) error {
-	// Вставка сообщения (id подставляется автоматически)
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO backend_schema.chat_messages (username, content, timestamp) 
 		 VALUES ($1, $2, NOW())`,
 		username, content,
 	)
+	r.logger.Info("Saved message")
 	return err
 }
 
@@ -44,15 +46,16 @@ func (r *Repository) GetRecentMessages(ctx context.Context) ([]domain.ChatMessag
 		}
 		messages = append(messages, msg)
 	}
+	r.logger.Info("Message return")
 	return messages, nil
 }
 
 func (r *Repository) DeleteOldMessages(ctx context.Context, olderThan time.Duration) error {
-	// Удаление сообщений, старше указанного интервала (например, 24h)
 	_, err := r.db.Exec(ctx,
 		`DELETE FROM backend_schema.chat_messages 
 		 WHERE timestamp < NOW() - ($1)::interval`,
 		olderThan.String(),
 	)
+	r.logger.Info("Old Message deleted")
 	return err
 }
